@@ -1,57 +1,27 @@
+
 #import <Foundation/Foundation.h>
 
-typedef enum {
-    XMLRPCElementTypeArray,
-    XMLRPCElementTypeDictionary,
-    XMLRPCElementTypeMember,
-    XMLRPCElementTypeName,
-    XMLRPCElementTypeInteger,
-    XMLRPCElementTypeDouble,
-    XMLRPCElementTypeBoolean,
-    XMLRPCElementTypeString,
-    XMLRPCElementTypeDate,
-    XMLRPCElementTypeData
-} XMLRPCElementType;
+typedef NS_ENUM(NSInteger, XMLRPCElementType) {
+	XMLRPCElementTypeArray,
+	XMLRPCElementTypeDictionary,
+	XMLRPCElementTypeMember,
+	XMLRPCElementTypeName,
+	XMLRPCElementTypeInteger,
+	XMLRPCElementTypeDouble,
+	XMLRPCElementTypeBoolean,
+	XMLRPCElementTypeString,
+	XMLRPCElementTypeDate,
+	XMLRPCElementTypeData
+};
 
-#pragma mark -
 
-@interface XMLRPCEventBasedParserDelegate : NSObject<NSXMLParserDelegate> {
-#if !__has_feature(objc_arc)
-    XMLRPCEventBasedParserDelegate *myParent;
-#else
-    // Without ARC this reference is effectively unretained so don't use strong reference here.
-    XMLRPCEventBasedParserDelegate * __unsafe_unretained myParent;
-#endif
-    NSMutableSet *myChildren;
-    XMLRPCElementType myElementType;
-    NSString *myElementKey;
-    id myElementValue;
-}
+@interface XMLRPCEventBasedParserDelegate : NSObject<NSXMLParserDelegate>
 
-- (id)initWithParent: (XMLRPCEventBasedParserDelegate *)parent;
+@property (assign) XMLRPCEventBasedParserDelegate *parent;
+@property (assign) XMLRPCElementType elementType;
+@property (strong) NSString *elementKey;
+@property (strong) id elementValue;
 
-#pragma mark -
-
-- (void)setParent: (XMLRPCEventBasedParserDelegate *)parent;
-
-- (XMLRPCEventBasedParserDelegate *)parent;
-
-#pragma mark -
-
-- (void)setElementType: (XMLRPCElementType)elementType;
-
-- (XMLRPCElementType)elementType;
-
-#pragma mark -
-
-- (void)setElementKey: (NSString *)elementKey;
-
-- (NSString *)elementKey;
-
-#pragma mark -
-
-- (void)setElementValue: (id)elementValue;
-
-- (id)elementValue;
+- (id)initWithParent:(XMLRPCEventBasedParserDelegate *)parent;
 
 @end

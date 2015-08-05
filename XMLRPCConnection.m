@@ -1,80 +1,48 @@
+
+
 #import "XMLRPCConnection.h"
 #import "XMLRPCConnectionManager.h"
 #import "XMLRPCRequest.h"
 #import "XMLRPCResponse.h"
 #import "NSStringAdditions.h"
+#import "XMLRPCArc.h"
 
-static NSOperationQueue *parsingQueue;
 
-@interface XMLRPCConnection (XMLRPCConnectionPrivate)
-
-- (void)connection: (NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response;
-
-- (void)connection: (NSURLConnection *)connection didReceiveData: (NSData *)data;
-
-- (void)connection: (NSURLConnection *)connection didSendBodyData: (NSInteger)bytesWritten totalBytesWritten: (NSInteger)totalBytesWritten totalBytesExpectedToWrite: (NSInteger)totalBytesExpectedToWrite;
-
-- (void)connection: (NSURLConnection *)connection didFailWithError: (NSError *)error;
-
-#pragma mark -
-
-- (BOOL)connection: (NSURLConnection *)connection canAuthenticateAgainstProtectionSpace: (NSURLProtectionSpace *)protectionSpace;
-
-- (void)connection: (NSURLConnection *)connection didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *)challenge;
-
-- (void)connection: (NSURLConnection *)connection didCancelAuthenticationChallenge: (NSURLAuthenticationChallenge *)challenge;
-
-- (void)connectionDidFinishLoading: (NSURLConnection *)connection;
-
-#pragma mark -
-
-- (void)timeoutExpired;
-- (void)invalidateTimer;
-
-#pragma mark -
-
-+ (NSOperationQueue *)parsingQueue;
-
+@interface XMLRPCConnection ()
+@property (strong, readwrite) NSString *identifier;
+@property (strong, readwrite) id<XMLRPCConnectionDelegate> delegate;
+@property (strong) XMLRPCConnectionManager *manager;
+@property (strong) XMLRPCRequest *request;
+@property (strong) NSMutableData *data;
+@property (strong) NSURLConnection *connection;
 @end
 
-#pragma mark -
 
 @implementation XMLRPCConnection
 
-- (id)initWithXMLRPCRequest: (XMLRPCRequest *)request delegate: (id<XMLRPCConnectionDelegate>)delegate manager: (XMLRPCConnectionManager *)manager {
-    self = [super init];
+- (id)initWithXMLRPCRequest:(XMLRPCRequest *)aRequest delegate:(id<XMLRPCConnectionDelegate>)aDelegate manager:(XMLRPCConnectionManager *)aManager {
+	
+	self = [super init];
     if (self) {
-#if ! __has_feature(objc_arc)
-        myManager = [manager retain];
-        myRequest = [request retain];
-        myIdentifier = [[NSString stringByGeneratingUUID] retain];
-#else
-        myManager = manager;
-        myRequest = request;
-        myIdentifier = [NSString stringByGeneratingUUID];
-#endif
-        myData = [[NSMutableData alloc] init];
+		
+		self.manager = aManager;
+		self.request = aRequest;
+		self.delegate = aDelegate;
+		self.identifier = [NSString stringByGeneratingUUID];
+		
+        self.data = AUTORELEASE([[NSMutableData alloc] init]);
         
-        myConnection = [[NSURLConnection alloc] initWithRequest: [request request] delegate: self startImmediately:NO];
-        [myConnection scheduleInRunLoop:[NSRunLoop mainRunLoop]
-                                forMode:NSDefaultRunLoopMode];
-        [myConnection start];
+        self.connection = AUTORELEASE([[NSURLConnection alloc] initWithRequest:aRequest.request delegate:self startImmediately:NO]);
+        [self.connection scheduleInRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+        [self.connection start];
         
-#if ! __has_feature(objc_arc)
-        myDelegate = [delegate retain];
-#else
-        myDelegate = delegate;
-#endif
-        
-        if (myConnection) {
-            NSLog(@"The connection, %@, has been established!", myIdentifier);
-
-            [self performSelector:@selector(timeoutExpired) withObject:nil afterDelay:[myRequest timeout]];
-        } else {
-            NSLog(@"The connection, %@, could not be established!", myIdentifier);
-#if ! __has_feature(objc_arc)
-            [self release];
-#endif
+        if (self.connection) {
+            NSLog(@"The connection, %@, has been established!", self.identifier);
+            [self performSelector:@selector(timeoutExpired) withObject:nil afterDelay:[self.request timeout]];
+        }
+		else {
+            NSLog(@"The connection, %@, could not be established!", self.identifier);
+			RELEASE(self);
             return nil;
         }
     }
@@ -82,25 +50,23 @@ static NSOperationQueue *parsingQueue;
     return self;
 }
 
-#pragma mark -
+- (void)cancel {
+    [self.connection cancel];
+    [self invalidateTimer];
+}
 
-+ (XMLRPCResponse *)sendSynchronousXMLRPCRequest: (XMLRPCRequest *)request error: (NSError **)error {
-    NSHTTPURLResponse *response = nil;
-#if ! __has_feature(objc_arc)
-    NSData *data = [[[NSURLConnection sendSynchronousRequest: [request request] returningResponse: &response error: error] retain] autorelease];
-#else
-    NSData *data = [NSURLConnection sendSynchronousRequest: [request request] returningResponse: &response error: error];
-#endif
-    
+#pragma mark - Class Methods
+
++ (XMLRPCResponse *)sendSynchronousXMLRPCRequest:(XMLRPCRequest *)aRequest error:(NSError **)error {
+
+	NSHTTPURLResponse *response = nil;
+	
+	NSData	*theData = [NSURLConnection sendSynchronousRequest:aRequest.request returningResponse:&response error:error];
     if (response) {
         NSInteger statusCode = [response statusCode];
         
-        if ((statusCode < 400) && data) {
-#if ! __has_feature(objc_arc)
-            return [[[XMLRPCResponse alloc] initWithData: data] autorelease];
-#else
-            return [[XMLRPCResponse alloc] initWithData: data];
-#endif
+        if ((statusCode < 400) && theData) {
+			return AUTORELEASE([[XMLRPCResponse alloc] initWithData: theData]);
         }
     }
     
@@ -109,168 +75,115 @@ static NSOperationQueue *parsingQueue;
 
 #pragma mark -
 
-- (NSString *)identifier {
-#if ! __has_feature(objc_arc)
-    return [[myIdentifier retain] autorelease];
-#else
-    return myIdentifier;
-#endif
+- (void)dealloc {
+	self.identifier = nil;
+	self.delegate = nil;
+	self.request = nil;
+	self.manager = nil;
+	self.connection = nil;
+	self.data = nil;
+
+    DEALLOC(super);
 }
 
-#pragma mark -
 
-- (id<XMLRPCConnectionDelegate>)delegate {
-    return myDelegate;
-}
+#pragma mark - Connection Delegation
 
-#pragma mark -
-
-- (void)cancel {
-    [myConnection cancel];
-
-    [self invalidateTimer];
-}
-
-#pragma mark -
-
-- (void)dealloc {    
-#if ! __has_feature(objc_arc)
-    [myManager release];
-    [myRequest release];
-    [myIdentifier release];
-    [myData release];
-    [myConnection release];
-    [myDelegate release];
-    
-    [super dealloc];
-#endif
-}
-
-@end
-
-#pragma mark -
-
-@implementation XMLRPCConnection (XMLRPCConnectionPrivate)
-
-- (void)connection: (NSURLConnection *)connection didReceiveResponse: (NSURLResponse *)response {
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response {
     if([response respondsToSelector: @selector(statusCode)]) {
         NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
         
-        if(statusCode >= 400) {
-            NSError *error = [NSError errorWithDomain: @"HTTP" code: statusCode userInfo: nil];
-            
-            [myDelegate request: myRequest didFailWithError: error];
-        } else if (statusCode == 304) {
-            [myManager closeConnectionForIdentifier: myIdentifier];
+        if (statusCode >= 400) {
+            NSError *error = [NSError errorWithDomain:@"HTTP" code:statusCode userInfo:nil];
+            [self.delegate request:self.request didFailWithError:error];
+        }
+		else if (statusCode == 304) {
+            [self.manager closeConnectionForIdentifier:self.identifier];
         }
     }
     
-    [myData setLength: 0];
+    [self.data setLength:0];
 }
 
-- (void)connection: (NSURLConnection *)connection didReceiveData: (NSData *)data {
-    [myData appendData: data];
+- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)theData {
+    [self.data appendData:theData];
 }
 
-- (void)connection: (NSURLConnection *)connection didSendBodyData: (NSInteger)bytesWritten totalBytesWritten: (NSInteger)totalBytesWritten totalBytesExpectedToWrite: (NSInteger)totalBytesExpectedToWrite {
-    if ([myDelegate respondsToSelector: @selector(request:didSendBodyData:)]) {
+- (void)connection:(NSURLConnection *)connection didSendBodyData:(NSInteger)bytesWritten totalBytesWritten:(NSInteger)totalBytesWritten totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
+	
+	if ([self.delegate respondsToSelector: @selector(request:didSendBodyData:)]) {
         float percent = totalBytesWritten / (float)totalBytesExpectedToWrite;
         
-        [myDelegate request:myRequest didSendBodyData:percent];
+        [self.delegate request:self.request didSendBodyData:percent];
     }
 }
 
-- (void)connection: (NSURLConnection *)connection didFailWithError: (NSError *)error {
-#if ! __has_feature(objc_arc)
-    XMLRPCRequest *request = [[myRequest retain] autorelease];
-#else
-    XMLRPCRequest *request = myRequest;
-#endif
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
 
-    NSLog(@"The connection, %@, failed with the following error: %@", myIdentifier, [error localizedDescription]);
+	NSLog(@"The connection, %@, failed with the following error: %@", self.identifier, [error localizedDescription]);
 
     [self invalidateTimer];
 
-    [myDelegate request: request didFailWithError: error];
-    
-    [myManager closeConnectionForIdentifier: myIdentifier];
+    [self.delegate request:self.request didFailWithError:error];
+    [self.manager closeConnectionForIdentifier:self.identifier];
 }
 
-#pragma mark -
-
-- (BOOL)connection: (NSURLConnection *)connection canAuthenticateAgainstProtectionSpace: (NSURLProtectionSpace *)protectionSpace {
-    return [myDelegate request: myRequest canAuthenticateAgainstProtectionSpace: protectionSpace];
+- (BOOL)connection:(NSURLConnection *)connection canAuthenticateAgainstProtectionSpace:(NSURLProtectionSpace *)protectionSpace {
+	return [self.delegate request:self.request canAuthenticateAgainstProtectionSpace:protectionSpace];
 }
 
-- (void)connection: (NSURLConnection *)connection didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *)challenge {
-    [myDelegate request: myRequest didReceiveAuthenticationChallenge: challenge];
+- (void)connection:(NSURLConnection *)connection didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge {
+    [self.delegate request:self.request didReceiveAuthenticationChallenge:challenge];
 }
 
-- (void)connection: (NSURLConnection *)connection didCancelAuthenticationChallenge: (NSURLAuthenticationChallenge *)challenge {
-    [myDelegate request: myRequest didCancelAuthenticationChallenge: challenge];
+- (void)connection:(NSURLConnection *)connection didCancelAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge {
+    [self.delegate request:self.request didCancelAuthenticationChallenge:challenge];
 }
 
-- (void)connectionDidFinishLoading: (NSURLConnection *)connection {
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
     [self invalidateTimer];
-    if (myData && ([myData length] > 0)) {
-        NSBlockOperation *parsingOperation;
+    if (self.data && ([self.data length] > 0)) {
 
-#if ! __has_feature(objc_arc)
-        parsingOperation = [NSBlockOperation blockOperationWithBlock:^{
-            XMLRPCResponse *response = [[[XMLRPCResponse alloc] initWithData: myData] autorelease];
-            XMLRPCRequest *request = [[myRequest retain] autorelease];
-
-            [[NSOperationQueue mainQueue] addOperation: [NSBlockOperation blockOperationWithBlock:^{
-               [myDelegate request: request didReceiveResponse: response]; 
-            }]];
-        }];
-#else
-        parsingOperation = [NSBlockOperation blockOperationWithBlock:^{
-            XMLRPCResponse *response = [[XMLRPCResponse alloc] initWithData: myData];
-            XMLRPCRequest *request = myRequest;
-
-            [[NSOperationQueue mainQueue] addOperation: [NSBlockOperation blockOperationWithBlock:^{
-                [myDelegate request: request didReceiveResponse: response];
-
-                [myManager closeConnectionForIdentifier: myIdentifier];
-            }]];
-        }];
-#endif
-        
-        [[XMLRPCConnection parsingQueue] addOperation: parsingOperation];
+		NSData __block *theData = self.data;
+		XMLRPCRequest __block *request = self.request;
+		XMLRPCConnectionManager __block *theManager = self.manager;
+		id<XMLRPCConnectionDelegate> __block theDelegate = self.delegate;
+		
+		[[XMLRPCConnection parsingQueue] addOperationWithBlock:^{
+			XMLRPCResponse *response = AUTORELEASE([[XMLRPCResponse alloc] initWithData:theData]);
+			[[NSOperationQueue mainQueue] addOperationWithBlock:^{
+				[theDelegate request:request didReceiveResponse:response];
+				[theManager closeConnectionForIdentifier:self.identifier];
+			}];
+		}];
     }
     else {
-        [myManager closeConnectionForIdentifier: myIdentifier];
+        [self.manager closeConnectionForIdentifier:self.identifier];
     }
 }
 
-#pragma mark -
-- (void)timeoutExpired
-{
-    NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
-                              [myRequest URL], NSURLErrorFailingURLErrorKey,
-                              [[myRequest URL] absoluteString], NSURLErrorFailingURLStringErrorKey,
-                              //TODO not good to use hardcoded value for localized description
-                              @"The request timed out.", NSLocalizedDescriptionKey,
-                              nil];
+#pragma mark - Timeout Handling
 
+- (void)timeoutExpired {
+
+	NSDictionary *userInfo = @{NSURLErrorFailingURLErrorKey: self.request.URL, NSURLErrorFailingURLStringErrorKey: [self.request.URL absoluteString], NSLocalizedDescriptionKey: @"The request timed out."};
+	
     NSError *error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:userInfo];
-
-    [self connection:myConnection didFailWithError:error];
+    [self connection:self.connection didFailWithError:error];
 }
 
-- (void)invalidateTimer
-{
+- (void)invalidateTimer {
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(timeoutExpired) object:nil];
 }
 
 #pragma mark -
 
 + (NSOperationQueue *)parsingQueue {
-    if (parsingQueue == nil) {
-        parsingQueue = [[NSOperationQueue alloc] init];
-    }
-    
+	static NSOperationQueue *parsingQueue = nil;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		parsingQueue = [[NSOperationQueue alloc] init];
+	});
     return parsingQueue;
 }
 

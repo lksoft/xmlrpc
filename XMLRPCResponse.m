@@ -1,101 +1,77 @@
+
 #import "XMLRPCResponse.h"
 #import "XMLRPCEventBasedParser.h"
+#import "XMLRPCArc.h"
+
+
+@interface XMLRPCResponse ()
+@property (strong, readwrite) NSString *body;
+@property (strong, readwrite) id object;
+@property (assign, readwrite) BOOL fault;
+@end
+
 
 @implementation XMLRPCResponse
 
-- (id)initWithData: (NSData *)data {
-    if (!data) {
+- (id)initWithData:(NSData *)theData {
+    if (!theData) {
         return nil;
     }
 
     self = [super init];
     if (self) {
-        XMLRPCEventBasedParser *parser = [[XMLRPCEventBasedParser alloc] initWithData: data];
+        XMLRPCEventBasedParser *parser = AUTORELEASE([[XMLRPCEventBasedParser alloc] initWithData:theData]);
         
         if (!parser) {
-#if ! __has_feature(objc_arc)
-            [self release];
-#endif
+			RELEASE(self);
             return nil;
         }
     
-        myBody = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
-        myObject = [parser parse];
-#if ! __has_feature(objc_arc)
-        [myObject retain];
-#endif
-        
-        isFault = [parser isFault];
-        
-#if ! __has_feature(objc_arc)
-        [parser release];
-#endif
+		self.body = AUTORELEASE([[NSString alloc] initWithData:theData encoding:NSUTF8StringEncoding]);
+		self.object = [parser parse];
+		self.fault = parser.fault;
+		
     }
     
     return self;
 }
 
-#pragma mark -
-
-- (BOOL)isFault {
-    return isFault;
+- (void)dealloc {
+	self.body = nil;
+	self.object = nil;
+	DEALLOC(super);
 }
 
+#pragma mark - Accessors
+
 - (NSNumber *)faultCode {
-    if (isFault) {
-        return [myObject objectForKey: @"faultCode"];
+    if (self.fault) {
+        return [self.object objectForKey:@"faultCode"];
     }
-    
     return nil;
 }
 
 - (NSString *)faultString {
-    if (isFault) {
-        return [myObject objectForKey: @"faultString"];
+    if (self.fault) {
+        return [self.object objectForKey:@"faultString"];
     }
-    
     return nil;
 }
 
-#pragma mark -
-
-- (id)object {
-    return myObject;
-}
-
-#pragma mark -
-
-- (NSString *)body {
-    return myBody;
-}
-
-#pragma mark -
+#pragma mark - debugging
 
 - (NSString *)description {
 	NSMutableString	*result = [NSMutableString stringWithCapacity:128];
     
-	[result appendFormat:@"[body=%@", myBody];
-    
-	if (isFault) {
-		[result appendFormat:@", fault[%@]='%@'", [self faultCode], [self faultString]];
+	[result appendFormat:@"[body=%@", self.body];
+	if (self.fault) {
+		[result appendFormat:@", fault[%@]='%@'", self.faultCode, self.faultString];
 	} else {
-		[result appendFormat:@", object=%@", myObject];
+		[result appendFormat:@", object=%@", self.object];
 	}
-    
 	[result appendString:@"]"];
     
-	return result;
-}
-
-#pragma mark -
-
-- (void)dealloc {
-#if ! __has_feature(objc_arc)
-    [myBody release];
-    [myObject release];
-    
-    [super dealloc];
-#endif
+	return [NSString stringWithString:result];
 }
 
 @end

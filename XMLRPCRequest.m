@@ -1,195 +1,141 @@
+
 #import "XMLRPCRequest.h"
 #import "XMLRPCEncoder.h"
 #import "XMLRPCDefaultEncoder.h"
+#import "XMLRPCArc.h"
 
 static const NSTimeInterval DEFAULT_TIMEOUT = 240;
 
+
+@interface XMLRPCRequest ()
+@property (strong) NSMutableURLRequest *internalRequest;
+@end
+
+
 @implementation XMLRPCRequest
 
-- (id)initWithURL: (NSURL *)URL withEncoder: (id<XMLRPCEncoder>)encoder {
+@synthesize encoder = _encoder;
+
+- (id)initWithURL:(NSURL *)aURL withEncoder:(id<XMLRPCEncoder>)anEncoder {
     self = [super init];
     if (self) {
-        if (URL) {
-            myRequest = [[NSMutableURLRequest alloc] initWithURL: URL];
+        if (aURL) {
+            self.internalRequest = AUTORELEASE([[NSMutableURLRequest alloc] initWithURL:aURL]);
         } else {
-            myRequest = [[NSMutableURLRequest alloc] init];
+            self.internalRequest = AUTORELEASE([[NSMutableURLRequest alloc] init]);
         }
         
-        myXMLEncoder = encoder;
-#if ! __has_feature(objc_arc)
-        [myXMLEncoder retain];
-#endif
-
-        myTimeout = DEFAULT_TIMEOUT;
+        self.encoder = anEncoder;
+        self.timeout = DEFAULT_TIMEOUT;
+		self.userAgent = [[NSUserDefaults standardUserDefaults] objectForKey:@"UserAgent"];
     }
     
     return self;
 }
 
-- (id)initWithURL: (NSURL *)URL {
-#if ! __has_feature(objc_arc)
-    return [self initWithURL:URL withEncoder:[[[XMLRPCDefaultEncoder alloc] init] autorelease]];
-#else
-    return [self initWithURL:URL withEncoder:[[XMLRPCDefaultEncoder alloc] init]];
-#endif
+- (id)initWithURL:(NSURL *)aURL {
+    return [self initWithURL:aURL withEncoder:AUTORELEASE([[XMLRPCDefaultEncoder alloc] init])];
 }
 
-#pragma mark -
-
-- (void)setURL: (NSURL *)URL {
-    [myRequest setURL: URL];
+- (void)dealloc {
+	self.internalRequest = nil;
+	self.encoder = nil;
+	self.extra = nil;
+	DEALLOC(super);
 }
 
-- (NSURL *)URL {
-    return [myRequest URL];
+
+#pragma mark - Accessors
+
+- (id<XMLRPCEncoder>)encoder {
+	return AUTORELEASE(RETAIN(_encoder));
 }
 
-#pragma mark -
-
-- (void)setUserAgent: (NSString *)userAgent {
-    if (![self userAgent]) {
-        [myRequest addValue: userAgent forHTTPHeaderField: @"User-Agent"];
-    } else {
-        [myRequest setValue: userAgent forHTTPHeaderField: @"User-Agent"];
-    }
+- (void)setEncoder:(id<XMLRPCEncoder>)anEncoder {
+	
+	NSString *method = self.encoder.method;
+	NSArray *parameters = self.encoder.parameters;
+	id<XMLRPCEncoder> temp = _encoder;
+	_encoder = RETAIN(anEncoder);
+	RELEASE(temp);
+	
+    [_encoder setMethod:method withParameters:parameters];
 }
-
-- (NSString *)userAgent {
-    return [myRequest valueForHTTPHeaderField: @"User-Agent"];
-}
-
-#pragma mark -
-
-- (void)setEncoder:(id<XMLRPCEncoder>)encoder {
-    NSString *method = [myXMLEncoder method];
-    NSArray *parameters = [myXMLEncoder parameters];
-#if ! __has_feature(objc_arc)
-    [myXMLEncoder release];
-    
-    myXMLEncoder = [encoder retain];
-#else
-    myXMLEncoder = encoder;
-#endif
-    
-    [myXMLEncoder setMethod: method withParameters: parameters];
-}
-
-- (void)setMethod: (NSString *)method {
-    [myXMLEncoder setMethod: method withParameters: nil];
-}
-
-- (void)setMethod: (NSString *)method withParameter: (id)parameter {
-    NSArray *parameters = nil;
-    
-    if (parameter) {
-        parameters = [NSArray arrayWithObject: parameter];
-    }
-    
-    [myXMLEncoder setMethod: method withParameters: parameters];
-}
-
-- (void)setMethod: (NSString *)method withParameters: (NSArray *)parameters {
-    [myXMLEncoder setMethod: method withParameters: parameters];
-}
-
-- (void)setTimeoutInterval: (NSTimeInterval)timeout
-{
-    myTimeout = timeout;
-}
-
-#pragma mark -
 
 - (NSString *)method {
-    return [myXMLEncoder method];
+	return self.encoder.method;
+}
+
+- (void)setMethod:(NSString *)theMethod {
+    [self setMethod:theMethod withParameters:nil];
+}
+
+- (void)setMethod:(NSString *)theMethod withParameter:(id)aParameter {
+    NSArray *parameters = nil;
+    
+    if (aParameter) {
+        parameters = @[aParameter];
+    }
+    
+    [self setMethod:theMethod withParameters:parameters];
+}
+
+- (void)setMethod:(NSString *)theMethod withParameters:(NSArray *)theParameters {
+    [self.encoder setMethod:theMethod withParameters:theParameters];
 }
 
 - (NSArray *)parameters {
-    return [myXMLEncoder parameters];
+    return self.encoder.parameters;
 }
-
-- (NSTimeInterval)timeout
-{
-    return myTimeout;
-}
-
-#pragma mark -
 
 - (NSString *)body {
-    return [myXMLEncoder encode];
+    return [self.encoder encode];
 }
 
-#pragma mark -
-
 - (NSURLRequest *)request {
-    NSData *content = [[self body] dataUsingEncoding: NSUTF8StringEncoding];
+    NSData *content = [self.body dataUsingEncoding:NSUTF8StringEncoding];
     NSNumber *contentLength = [NSNumber numberWithUnsignedInteger:[content length]];
     
-    if (!myRequest) {
+    if (!self.internalRequest) {
         return nil;
     }
     
-    [myRequest setHTTPMethod: @"POST"];
-    
-    if (![myRequest valueForHTTPHeaderField: @"Content-Type"]) {
-        [myRequest addValue: @"text/xml" forHTTPHeaderField: @"Content-Type"];
+    [self.internalRequest setHTTPMethod:@"POST"];
+	[self.internalRequest setURL:self.URL];
+	
+    if (![self.internalRequest valueForHTTPHeaderField: @"Content-Type"]) {
+        [self.internalRequest addValue:@"text/xml" forHTTPHeaderField:@"Content-Type"];
     } else {
-        [myRequest setValue: @"text/xml" forHTTPHeaderField: @"Content-Type"];
+        [self.internalRequest setValue:@"text/xml" forHTTPHeaderField:@"Content-Type"];
     }
     
-    if (![myRequest valueForHTTPHeaderField: @"Content-Length"]) {
-        [myRequest addValue: [contentLength stringValue] forHTTPHeaderField: @"Content-Length"];
+    if (![self.internalRequest valueForHTTPHeaderField:@"Content-Length"]) {
+        [self.internalRequest addValue:[contentLength stringValue] forHTTPHeaderField:@"Content-Length"];
     } else {
-        [myRequest setValue: [contentLength stringValue] forHTTPHeaderField: @"Content-Length"];
+        [self.internalRequest setValue:[contentLength stringValue] forHTTPHeaderField:@"Content-Length"];
     }
     
-    if (![myRequest valueForHTTPHeaderField: @"Accept"]) {
-        [myRequest addValue: @"text/xml" forHTTPHeaderField: @"Accept"];
+    if (![self.internalRequest valueForHTTPHeaderField:@"Accept"]) {
+        [self.internalRequest addValue:@"text/xml" forHTTPHeaderField:@"Accept"];
     } else {
-        [myRequest setValue: @"text/xml" forHTTPHeaderField: @"Accept"];
+        [self.internalRequest setValue:@"text/xml" forHTTPHeaderField:@"Accept"];
     }
     
-    if (![self userAgent]) {
-      NSString *userAgent = [[NSUserDefaults standardUserDefaults] objectForKey:@"UserAgent"];
-        
-      if (userAgent) {
-        [self setUserAgent: userAgent];
-      }
-    }
+	if (self.userAgent) {
+		if (![self.internalRequest valueForHTTPHeaderField:@"User-Agent"]) {
+			[self.internalRequest addValue:self.userAgent forHTTPHeaderField:@"User-Agent"];
+		} else {
+			[self.internalRequest setValue:self.userAgent forHTTPHeaderField:@"User-Agent"];
+		}
+	}
+	
+    [self.internalRequest setHTTPBody:content];
     
-    [myRequest setHTTPBody: content];
-    
-    return (NSURLRequest *)myRequest;
+    return (NSURLRequest *)self.internalRequest;
 }
 
-#pragma mark -
-
-- (void)setValue: (NSString *)value forHTTPHeaderField: (NSString *)header {
-    [myRequest setValue: value forHTTPHeaderField: header];
-}
-#pragma mark -
-
-- (id) extra {
-    return extra;
-}
-
-- (void) setExtra:(id) extraObject {
-#if ! __has_feature(objc_arc)
-    [extra release];
-    extra = [extraObject retain];
-#else
-    extra = extraObject;
-#endif
-}
-
-#pragma mark -
-
-- (void)dealloc {
-#if ! __has_feature(objc_arc)
-    [myRequest release];
-    [myXMLEncoder release];
-    
-    [super dealloc];
-#endif
+- (void)setValue:(NSString *)aValue forHTTPHeaderField:(NSString *)aHeader {
+    [self.internalRequest setValue:aValue forHTTPHeaderField:aHeader];
 }
 
 @end

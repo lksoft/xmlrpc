@@ -1,33 +1,15 @@
+
 #import <Foundation/Foundation.h>
 
-@class XMLRPCDecoder;
+@interface XMLRPCResponse : NSObject
 
-@interface XMLRPCResponse : NSObject {
-    NSString *myBody;
-    id myObject;
-    BOOL isFault;
-}
+@property (strong, readonly) NSString *body;
+@property (strong, readonly) id object;
+@property (assign, readonly) BOOL fault;
+@property (strong, readonly) NSNumber *faultCode;
+@property (strong, readonly) NSString *faultString;
 
-- (id)initWithData: (NSData *)data;
 
-#pragma mark -
-
-- (BOOL)isFault;
-
-- (NSNumber *)faultCode;
-
-- (NSString *)faultString;
-
-#pragma mark -
-
-- (id)object;
-
-#pragma mark -
-
-- (NSString *)body;
-
-#pragma mark -
-
-- (NSString *)description;
+- (id)initWithData:(NSData *)theData;
 
 @end

@@ -1,357 +1,230 @@
+
 #import "XMLRPCEventBasedParserDelegate.h"
 #import "NSData+Base64.h"
+#import "XMLRPCArc.h"
 
-@interface XMLRPCEventBasedParserDelegate (XMLRPCEventBasedParserDelegatePrivate)
 
-- (BOOL)isDictionaryElementType: (XMLRPCElementType)elementType;
-
-#pragma mark -
-
-- (void)addElementValueToParent;
-
-#pragma mark -
-
-- (NSDate *)parseDateString: (NSString *)dateString withFormat: (NSString *)format;
-
-#pragma mark -
-
-- (NSNumber *)parseInteger: (NSString *)value;
-
-- (NSNumber *)parseDouble: (NSString *)value;
-
-- (NSNumber *)parseBoolean: (NSString *)value;
-
-- (NSString *)parseString: (NSString *)value;
-
-- (NSDate *)parseDate: (NSString *)value;
-
-- (NSData *)parseData: (NSString *)value;
-
+@interface XMLRPCEventBasedParserDelegate ()
+@property (strong) NSMutableSet *children;
 @end
-
-#pragma mark -
 
 @implementation XMLRPCEventBasedParserDelegate
 
 - (id)initWithParent: (XMLRPCEventBasedParserDelegate *)parent {
     self = [super init];
     if (self) {
-        myParent = parent;
-        myChildren = [[NSMutableSet alloc] initWithCapacity: 1];
-        myElementType = XMLRPCElementTypeString;
-        myElementKey = nil;
-        myElementValue = [[NSMutableString alloc] init];
+        self.parent = parent;
+        self.children = [NSMutableSet set];
+        self.elementType = XMLRPCElementTypeString;
+        self.elementKey = nil;
+        self.elementValue = [NSMutableString string];
     }
     
     return self;
 }
 
-#pragma mark -
-
-- (void)setParent: (XMLRPCEventBasedParserDelegate *)parent {
-#if ! __has_feature(objc_arc)
-    [parent retain];
-    [myParent release];
-#endif
-    
-    myParent = parent;
-}
-
-- (XMLRPCEventBasedParserDelegate *)parent {
-    return myParent;
-}
-
-#pragma mark -
-
-- (void)setElementType: (XMLRPCElementType)elementType {
-    myElementType = elementType;
-}
-
-- (XMLRPCElementType)elementType {
-    return myElementType;
-}
-
-#pragma mark -
-
-- (void)setElementKey: (NSString *)elementKey {
-#if ! __has_feature(objc_arc)
-    [elementKey retain];
-    [myElementKey release];
-#endif
-    
-    myElementKey = elementKey;
-}
-
-- (NSString *)elementKey {
-    return myElementKey;
-}
-
-#pragma mark -
-
-- (void)setElementValue: (id)elementValue {
-#if ! __has_feature(objc_arc)
-    [elementValue retain];
-    [myElementValue release];
-#endif
-    
-    myElementValue = elementValue;
-}
-
-- (id)elementValue {
-    return myElementValue;
-}
-
-#pragma mark -
-
 - (void)dealloc {
-#if ! __has_feature(objc_arc)
-    [myChildren release];
-    [myElementKey release];
-    [myElementValue release];
-    
-    [super dealloc];
-#endif
+	self.children = nil;
+	self.elementKey = nil;
+	self.elementValue = nil;
+    DEALLOC(super);
 }
 
-@end
 
-#pragma mark -
+#pragma mark - Parser Delegate Methods
 
-@implementation XMLRPCEventBasedParserDelegate (NSXMLParserDelegate)
-
-- (void)parser: (NSXMLParser *)parser didStartElement: (NSString *)element namespaceURI: (NSString *)namespaceURI qualifiedName: (NSString *)qualifiedName attributes: (NSDictionary *)attributes {
-    if ([element isEqualToString: @"value"] || [element isEqualToString: @"member"] || [element isEqualToString: @"name"]) {
-        XMLRPCEventBasedParserDelegate *parserDelegate = [[XMLRPCEventBasedParserDelegate alloc] initWithParent: self];
+- (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)element namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qualifiedName attributes:(NSDictionary *)attributes {
+	
+    if ([element isEqualToString:@"value"] || [element isEqualToString:@"member"] || [element isEqualToString:@"name"]) {
+        XMLRPCEventBasedParserDelegate *parserDelegate = AUTORELEASE([[XMLRPCEventBasedParserDelegate alloc] initWithParent:self]);
         
-        if ([element isEqualToString: @"member"]) {
-            [parserDelegate setElementType: XMLRPCElementTypeMember];
-        } else if ([element isEqualToString: @"name"]) {
-            [parserDelegate setElementType: XMLRPCElementTypeName];
+        if ([element isEqualToString:@"member"]) {
+            [parserDelegate setElementType:XMLRPCElementTypeMember];
+        } else if ([element isEqualToString:@"name"]) {
+            [parserDelegate setElementType:XMLRPCElementTypeName];
         }
         
-        [myChildren addObject: parserDelegate];
-        
-        [parser setDelegate: parserDelegate];
-#if ! __has_feature(objc_arc)
-        [parserDelegate release];
-#endif
+        [self.children addObject:parserDelegate];
+        [parser setDelegate:parserDelegate];
         return;
     }
     
-    if ([element isEqualToString: @"array"]) {
-        NSMutableArray *array = [[NSMutableArray alloc] init];
-        
-        [self setElementValue: array];
-#if ! __has_feature(objc_arc)
-        [array release];
-#endif
-        [self setElementType: XMLRPCElementTypeArray];
-    } else if ([element isEqualToString: @"struct"]) {
-        NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] init];
-        
-        [self setElementValue: dictionary];
-#if ! __has_feature(objc_arc)
-        [dictionary release];
-#endif
+    if ([element isEqualToString:@"array"]) {
+        [self setElementValue:[NSMutableArray array]];
+        [self setElementType:XMLRPCElementTypeArray];
+    } else if ([element isEqualToString:@"struct"]) {
+        [self setElementValue:[NSMutableDictionary dictionary]];
         [self setElementType: XMLRPCElementTypeDictionary];
-    } else if ([element isEqualToString: @"int"] || [element isEqualToString: @"i4"]) {
-        [self setElementType: XMLRPCElementTypeInteger];
-    } else if ([element isEqualToString: @"double"]) {
-        [self setElementType: XMLRPCElementTypeDouble];
-    } else if ([element isEqualToString: @"boolean"]) {
-        [self setElementType: XMLRPCElementTypeBoolean];
-    } else if ([element isEqualToString: @"string"]) {
-        [self setElementType: XMLRPCElementTypeString];
-    } else if ([element isEqualToString: @"dateTime.iso8601"]) {
-        [self setElementType: XMLRPCElementTypeDate];
-    } else if ([element isEqualToString: @"base64"]) {
-        [self setElementType: XMLRPCElementTypeData];
+    } else if ([element isEqualToString:@"int"] || [element isEqualToString:@"i4"]) {
+        [self setElementType:XMLRPCElementTypeInteger];
+    } else if ([element isEqualToString:@"double"]) {
+        [self setElementType:XMLRPCElementTypeDouble];
+    } else if ([element isEqualToString:@"boolean"]) {
+        [self setElementType:XMLRPCElementTypeBoolean];
+    } else if ([element isEqualToString:@"string"]) {
+        [self setElementType:XMLRPCElementTypeString];
+    } else if ([element isEqualToString:@"dateTime.iso8601"]) {
+        [self setElementType:XMLRPCElementTypeDate];
+    } else if ([element isEqualToString:@"base64"]) {
+        [self setElementType:XMLRPCElementTypeData];
     }
 }
 
-- (void)parser: (NSXMLParser *)parser didEndElement: (NSString *)element namespaceURI: (NSString *)namespaceURI qualifiedName: (NSString *)qualifiedName {
-    if ([element isEqualToString: @"value"] || [element isEqualToString: @"member"] || [element isEqualToString: @"name"]) {
+- (void)parser:(NSXMLParser *)parser didEndElement:(NSString *)element namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qualifiedName {
+	
+    if ([element isEqualToString:@"value"] || [element isEqualToString:@"member"] || [element isEqualToString:@"name"]) {
         NSString *elementValue = nil;
         
-        if ((myElementType != XMLRPCElementTypeArray) && ![self isDictionaryElementType: myElementType]) {
-            elementValue = [self parseString: myElementValue];
-#if ! __has_feature(objc_arc)
-            [myElementValue release];
-#endif
-            myElementValue = nil;
-        }
-        
-        switch (myElementType) {
-            case XMLRPCElementTypeInteger:
-                myElementValue = [self parseInteger: elementValue];
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            case XMLRPCElementTypeDouble:
-                myElementValue = [self parseDouble: elementValue];
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            case XMLRPCElementTypeBoolean:
-                myElementValue = [self parseBoolean: elementValue];
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            case XMLRPCElementTypeString:
-            case XMLRPCElementTypeName:
-                myElementValue = elementValue;
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            case XMLRPCElementTypeDate:
-                myElementValue = [self parseDate: elementValue];
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            case XMLRPCElementTypeData:
-                myElementValue = [self parseData: elementValue];
-#if ! __has_feature(objc_arc)
-                [myElementValue retain];
-#endif
-                break;
-            default:
-                break;
-        }
-        
-        if (myParent && myElementValue) {
-            [self addElementValueToParent];
-        }
-        
-        [parser setDelegate: myParent];
-
-        if (myParent) {
-            XMLRPCEventBasedParserDelegate *parent = myParent;
-
-            // Set it to nil explicitly since it's not __weak but __unsafe_unretained.
-            // We're doing it here because if we'll do it after removal from myChildren
-            // self can already be deallocated, and accessing field of deallocated object
-            // causes memory corruption.
-            myParent = nil;
-
-            [parent->myChildren removeObject: self];
-        }
+		if ((self.elementType != XMLRPCElementTypeArray) && ![self isDictionaryElementType:self.elementType]) {
+			elementValue = [self parseString:self.elementValue];
+			self.elementValue = nil;
+		}
+		
+		switch (self.elementType) {
+			case XMLRPCElementTypeInteger:
+				self.elementValue = [self parseInteger:elementValue];
+				break;
+				
+			case XMLRPCElementTypeDouble:
+				self.elementValue = [self parseDouble:elementValue];
+				break;
+				
+			case XMLRPCElementTypeBoolean:
+				self.elementValue = [self parseBoolean:elementValue];
+				break;
+				
+			case XMLRPCElementTypeString:
+			case XMLRPCElementTypeName:
+				self.elementValue = elementValue;
+				break;
+				
+			case XMLRPCElementTypeDate:
+				self.elementValue = [self parseDate:elementValue];
+				break;
+				
+			case XMLRPCElementTypeData:
+				self.elementValue = [self parseData:elementValue];
+				break;
+				
+			default:
+				break;
+		}
+		
+		if (self.parent && self.elementValue) {
+			[self addElementValueToParent];
+		}
+		
+		[parser setDelegate:self.parent];
+		
+		if (self.parent) {
+			XMLRPCEventBasedParserDelegate *parent = self.parent;
+			
+			// Set it to nil explicitly since it's not __weak but __unsafe_unretained.
+			// We're doing it here because if we'll do it after removal from myChildren
+			// self can already be deallocated, and accessing field of deallocated object
+			// causes memory corruption.
+			self.parent = nil;
+			
+			[parent.children removeObject:self];
+		}
     }
 }
 
-- (void)parser: (NSXMLParser *)parser foundCharacters: (NSString *)string {
-    if ((myElementType == XMLRPCElementTypeArray) || [self isDictionaryElementType: myElementType]) {
+- (void)parser:(NSXMLParser *)parser foundCharacters:(NSString *)string {
+    if ((self.elementType == XMLRPCElementTypeArray) || [self isDictionaryElementType:self.elementType]) {
         return;
     }
     
-    if (!myElementValue) {
-        myElementValue = [[NSMutableString alloc] initWithString: string];
+    if (!self.elementValue) {
+        self.elementValue = [[NSMutableString alloc] initWithString:string];
     } else {
-        [myElementValue appendString: string];
+        [self.elementValue appendString:string];
     }
 }
 
-- (void)parser: (NSXMLParser *)parser parseErrorOccurred: (NSError *)parseError {
+- (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
     [parser abortParsing];
 }
 
-@end
 
-#pragma mark -
+#pragma mark - Helper Methods
 
-@implementation XMLRPCEventBasedParserDelegate (XMLRPCEventBasedParserDelegatePrivate)
-
-- (BOOL)isDictionaryElementType: (XMLRPCElementType)elementType {
-    if ((myElementType == XMLRPCElementTypeDictionary) || (myElementType == XMLRPCElementTypeMember)) {
+- (BOOL)isDictionaryElementType:(XMLRPCElementType)elementType {
+    if ((self.elementType == XMLRPCElementTypeDictionary) || (self.elementType == XMLRPCElementTypeMember)) {
         return YES;
     }
     
     return NO;
 }
 
-#pragma mark -
-
 - (void)addElementValueToParent {
-    id parentElementValue = [myParent elementValue];
+    id parentElementValue = self.parent.elementValue;
     
-    switch ([myParent elementType]) {
-        case XMLRPCElementTypeArray:
-            [parentElementValue addObject: myElementValue];
-            
-            break;
-        case XMLRPCElementTypeDictionary:
-            if ([myElementValue isEqual:[NSNull null]]) {
-                [parentElementValue removeObjectForKey:myElementKey];
-            } else {
-                [parentElementValue setObject: myElementValue forKey: myElementKey];
-            }
-            
-            break;
-        case XMLRPCElementTypeMember:
-            if (myElementType == XMLRPCElementTypeName) {
-                [myParent setElementKey: myElementValue];
-            } else {
-                [myParent setElementValue: myElementValue];
-            }
-            
-            break;
-        default:
-            break;
-    }
+	switch (self.parent.elementType) {
+		case XMLRPCElementTypeArray:
+			[parentElementValue addObject:self.elementValue];
+			break;
+			
+		case XMLRPCElementTypeDictionary:
+			if ([self.elementValue isEqual:[NSNull null]]) {
+				[parentElementValue removeObjectForKey:self.elementKey];
+			} else {
+				[parentElementValue setObject:self.elementValue forKey:self.elementKey];
+			}
+			break;
+			
+		case XMLRPCElementTypeMember:
+			if (self.elementType == XMLRPCElementTypeName) {
+				[self.parent setElementKey:self.elementValue];
+			} else {
+				[self.parent setElementValue:self.elementValue];
+			}
+			break;
+			
+		default:
+			break;
+	}
 }
 
-#pragma mark -
+#pragma mark - Value Parsers
 
-- (NSDate *)parseDateString: (NSString *)dateString withFormat: (NSString *)format {
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+- (NSDate *)parseDateString:(NSString *)dateString withFormat:(NSString *)format {
+	
+    NSDateFormatter *dateFormatter = AUTORELEASE([[NSDateFormatter alloc] init]);
+    [dateFormatter setDateFormat:format];
+    return [dateFormatter dateFromString:dateString];;
+}
+
+- (NSNumber *)parseInteger:(NSString *)value {
+    return @([value integerValue]);
+}
+
+- (NSNumber *)parseDouble:(NSString *)value {
+    return @([value doubleValue]);
+}
+
+- (NSNumber *)parseBoolean:(NSString *)value {
+    if ([value isEqualToString:@"1"]) {
+        return @YES;
+    }
+    return @NO;
+}
+
+- (NSString *)parseString:(NSString *)value {
+    return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+- (NSDate *)parseDate:(NSString *)value {
     NSDate *result = nil;
     
-    [dateFormatter setDateFormat: format];
-    
-    result = [dateFormatter dateFromString: dateString];
-#if ! __has_feature(objc_arc)
-    [dateFormatter release];
-#endif
-    return result;
-}
-
-#pragma mark -
-
-- (NSNumber *)parseInteger: (NSString *)value {
-    return [NSNumber numberWithInteger: [value integerValue]];
-}
-
-- (NSNumber *)parseDouble: (NSString *)value {
-    return [NSNumber numberWithDouble: [value doubleValue]];
-}
-
-- (NSNumber *)parseBoolean: (NSString *)value {
-    if ([value isEqualToString: @"1"]) {
-        return [NSNumber numberWithBool: YES];
-    }
-    
-    return [NSNumber numberWithBool: NO];
-}
-
-- (NSString *)parseString: (NSString *)value {
-    return [value stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
-
-- (NSDate *)parseDate: (NSString *)value {
-    NSDate *result = nil;
-    
-    result = [self parseDateString: value withFormat: @"yyyyMMdd'T'HH:mm:ss"];
+    result = [self parseDateString:value withFormat:@"yyyyMMdd'T'HH:mm:ss"];
     
     if (!result) {
-        result = [self parseDateString: value withFormat: @"yyyy'-'MM'-'dd'T'HH:mm:ss"];
+        result = [self parseDateString:value withFormat:@"yyyy'-'MM'-'dd'T'HH:mm:ss"];
     }
     
     if (!result) {
-        result = [self parseDateString: value withFormat: @"yyyy'-'MM'-'dd'T'HH:mm:ssZ"];
+        result = [self parseDateString:value withFormat:@"yyyy'-'MM'-'dd'T'HH:mm:ssZ"];
     }
     
     if (!result) {
@@ -362,7 +235,7 @@
 }
 
 - (NSData *)parseData: (NSString *)value {
-    return [NSData dataFromBase64String: value];
+    return [NSData dataFromBase64String:value];
 }
 
 @end

@@ -1,33 +1,17 @@
+
 #import <Foundation/Foundation.h>
 #import "XMLRPCConnectionDelegate.h"
 
 @class XMLRPCConnectionManager, XMLRPCRequest, XMLRPCResponse;
 
-@interface XMLRPCConnection : NSObject {
-    XMLRPCConnectionManager *myManager;
-    XMLRPCRequest *myRequest;
-    NSString *myIdentifier;
-    NSMutableData *myData;
-    NSURLConnection *myConnection;
-    id<XMLRPCConnectionDelegate> myDelegate;
-}
+@interface XMLRPCConnection : NSObject
 
-- (id)initWithXMLRPCRequest: (XMLRPCRequest *)request delegate: (id<XMLRPCConnectionDelegate>)delegate manager: (XMLRPCConnectionManager *)manager;
+@property (strong, readonly) NSString *identifier;
+@property (strong, readonly) id<XMLRPCConnectionDelegate> delegate;
 
-#pragma mark -
++ (XMLRPCResponse *)sendSynchronousXMLRPCRequest:(XMLRPCRequest *)aRequest error:(NSError **)error;
 
-+ (XMLRPCResponse *)sendSynchronousXMLRPCRequest: (XMLRPCRequest *)request error: (NSError **)error;
-
-#pragma mark -
-
-- (NSString *)identifier;
-
-#pragma mark -
-
-- (id<XMLRPCConnectionDelegate>)delegate;
-
-#pragma mark -
-
+- (id)initWithXMLRPCRequest:(XMLRPCRequest *)aRequest delegate:(id<XMLRPCConnectionDelegate>)aDelegate manager:(XMLRPCConnectionManager *)aManager;
 - (void)cancel;
 
 @end

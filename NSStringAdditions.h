@@ -4,10 +4,7 @@
 
 + (NSString *)stringByGeneratingUUID;
 
-#pragma mark -
-
 - (NSString *)unescapedString;
-
 - (NSString *)escapedString;
 
 @end
