@@ -1,3 +1,5 @@
 #ifdef __OBJC__
     #import <Foundation/Foundation.h>
+	#define MCC_PLUGIN_PREFIX	SIS
+	#import "MCCXMLRPC.h"
 #endif

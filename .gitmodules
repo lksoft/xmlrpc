@@ -1,0 +1,3 @@
+[submodule "MCC"]
+	path = MCC
+	url = https://github.com/lksoft/MailCommon.git
