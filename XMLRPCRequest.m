@@ -19,12 +19,10 @@ static const NSTimeInterval DEFAULT_TIMEOUT = 240;
 - (id)initWithURL:(NSURL *)aURL withEncoder:(id<XMLRPCEncoder>)anEncoder {
     self = [super init];
     if (self) {
-        if (aURL) {
-            self.internalRequest = AUTORELEASE([[NSMutableURLRequest alloc] initWithURL:aURL]);
-        } else {
-            self.internalRequest = AUTORELEASE([[NSMutableURLRequest alloc] init]);
-        }
-        
+		
+		self.internalRequest = AUTORELEASE([[NSMutableURLRequest alloc] init]);
+		
+		self.URL = aURL;
         self.encoder = anEncoder;
         self.timeout = DEFAULT_TIMEOUT;
 		self.userAgent = [[NSUserDefaults standardUserDefaults] objectForKey:@"UserAgent"];
@@ -136,6 +134,21 @@ static const NSTimeInterval DEFAULT_TIMEOUT = 240;
 
 - (void)setValue:(NSString *)aValue forHTTPHeaderField:(NSString *)aHeader {
     [self.internalRequest setValue:aValue forHTTPHeaderField:aHeader];
+}
+
+#pragma mark - debugging
+
+- (NSString *)description {
+	NSMutableString	*result = [NSMutableString stringWithCapacity:128];
+	
+	[result appendFormat:@"%@ (%p) [\n\tmethod = '%@'", [self className], self, self.method];
+	[result appendFormat:@"\n\tURL = '%@'", self.URL];
+	[result appendFormat:@"\n\ttimeout = %@", @(self.timeout)];
+	[result appendFormat:@"\n\tparameters = %@", self.parameters];
+	[result appendFormat:@"\n\tbody = %@", self.body];
+	[result appendString:@"\n]"];
+	
+	return [NSString stringWithString:result];
 }
 
 @end

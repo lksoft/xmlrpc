@@ -63,13 +63,18 @@
 - (NSString *)description {
 	NSMutableString	*result = [NSMutableString stringWithCapacity:128];
     
-	[result appendFormat:@"[body=%@", self.body];
+	[result appendFormat:@"%@ (%p) [\n\tfault = '%@'", [self className], self, (self.fault)];
 	if (self.fault) {
-		[result appendFormat:@", fault[%@]='%@'", self.faultCode, self.faultString];
-	} else {
-		[result appendFormat:@", object=%@", self.object];
+		[result appendFormat:@"\n\tfaultCode = '%@'", self.faultCode];
+		[result appendFormat:@"\n\tfauleString = %@", self.faultString];
 	}
-	[result appendString:@"]"];
+	else {
+		[result appendFormat:@"\n\tObject's class = '%@'", [self.object className]];
+		[result appendFormat:@"\n\tObject = %@", self.object];
+	}
+	[result appendFormat:@"\n\tbody = %@", self.body];
+	[result appendString:@"\n]"];
+	
     
 	return [NSString stringWithString:result];
 }

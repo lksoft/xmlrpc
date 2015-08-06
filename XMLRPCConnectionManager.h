@@ -8,6 +8,7 @@
 
 @property (strong, readonly) NSArray *activeConnectionIdentifiers;
 @property (assign, readonly) NSUInteger numberOfActiveConnections;
+@property (assign) BOOL shouldLogConnections;
 
 + (XMLRPCConnectionManager *)sharedManager;
 

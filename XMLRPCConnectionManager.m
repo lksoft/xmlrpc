@@ -15,6 +15,7 @@
     self = [super init];
     if (self) {
         self.connections = AUTORELEASE([[NSMutableDictionary alloc] init]);
+		self.shouldLogConnections = NO;
     }
     
     return self;
@@ -42,6 +43,9 @@
 - (NSString *)spawnConnectionWithXMLRPCRequest: (XMLRPCRequest *)request delegate: (id<XMLRPCConnectionDelegate>)delegate {
 	XMLRPCConnection *newConnection = AUTORELEASE([[XMLRPCConnection alloc] initWithXMLRPCRequest:request delegate:delegate manager:self]);
 	[self.connections setObject:newConnection forKey:newConnection.identifier];
+	if (self.shouldLogConnections) {
+		NSLog(@"Connection information:\n\tConnection ID: %@\n\tMethod: '%@'\n\tParameters: %@", newConnection.identifier, request.method, request.parameters);
+	}
 	return newConnection.identifier;
 }
 
